@@ -1,0 +1,25 @@
+
+-- 1. Supprimer les anciennes tables
+DROP TABLE IF EXISTS soupes;
+DROP TABLE IF EXISTS favoris;
+
+-- 2. Créer la table soupes
+CREATE TABLE soupes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nom TEXT NOT NULL,
+  ingredients TEXT NOT NULL,
+  saison TEXT NOT NULL,
+  image_url TEXT,
+  instructions TEXT
+);
+
+-- 3. Créer la table favoris
+CREATE TABLE favoris (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  firebase_uid TEXT NOT NULL,
+  soupe_id INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(firebase_uid, soupe_id)
+);
+
+
