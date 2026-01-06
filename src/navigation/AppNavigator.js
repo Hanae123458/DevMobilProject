@@ -32,16 +32,7 @@ function HomeStack() {
           headerTitle: 'Accueil',
         }}
       />
-      <Stack.Screen 
-        name="DetailsSoupe" 
-        component={DetailsSoupeScreen}
-        options={{
-          headerShown: true,
-          headerTitle: 'Details',
-          headerStyle: { backgroundColor: colors.white },
-          headerTintColor: colors.text,
-        }}
-      />
+      {/* Retirez DetailsSoupe d'ici */}
     </Stack.Navigator>
   );
 }
@@ -73,7 +64,7 @@ function MainTabs() {
           fontSize: 12,
           fontWeight: '600',
         },
-        headerShown: false, // On cache le header ici car chaque stack gère son propre header
+        headerShown: false,
       })}
     >
       <Tab.Screen 
@@ -94,17 +85,39 @@ function MainTabs() {
   );
 }
 
+// Stack principal pour les utilisateurs connectés
+function AuthenticatedStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen 
+        name="MainTabs" 
+        component={MainTabs}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="DetailsSoupe" 
+        component={DetailsSoupeScreen}
+        options={{
+          headerShown: true,
+          headerTitle: 'Détails',
+          headerStyle: { backgroundColor: colors.white },
+          headerTintColor: colors.text,
+          headerBackTitle: 'Retour',
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
 export default function AppNavigator() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Initialiser la base de données
     initDatabase().catch(error => {
       console.error('Erreur initialisation DB:', error);
     });
 
-    // Observer l'état d'authentification
     const unsubscribe = observeAuthState((currentUser) => {
       setUser(currentUser);
       setLoading(false);
@@ -125,10 +138,10 @@ export default function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator>
         {user ? (
-          // Utilisateur connecté
+          // Utilisateur connecté - Utilisez AuthenticatedStack
           <Stack.Screen 
-            name="MainTabs" 
-            component={MainTabs}
+            name="AuthenticatedStack" 
+            component={AuthenticatedStack}
             options={{ headerShown: false }}
           />
         ) : (

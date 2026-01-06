@@ -1,39 +1,37 @@
+// ProfileScreen.js - VERSION CORRIGÉE
 import { Ionicons } from '@expo/vector-icons';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Image,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { auth } from '../../backend/firebase-config';
 import colors from '../constants/colors';
 import { logOut } from '../services/authService';
-import {
-  exportDatabaseToBackend,
-  getFavoriteSoupes,
-  removeFavorite
-} from '../services/databaseService';
+import { getAllSoupes } from '../services/databaseService';
+import { getFavoriteIds, removeFavorite } from '../services/favorisService';
 
 export default function ProfileScreen() {
+  const navigation = useNavigation();
   const [user, setUser] = useState(null);
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
-  const isFocused = useIsFocused(); // Détecter quand l'écran est visible
+  const isFocused = useIsFocused();
 
   useEffect(() => {
     const currentUser = auth.currentUser;
     setUser(currentUser);
+    console.log('👤 ProfileScreen - Utilisateur:', currentUser?.uid);
   }, []);
 
-  // Recharger les favoris à chaque fois que l'écran devient visible
   useEffect(() => {
     if (isFocused && user) {
       console.log('🔄 Écran Compte visible, rechargement des favoris...');
@@ -41,11 +39,43 @@ export default function ProfileScreen() {
     }
   }, [isFocused, user]);
 
+  // Fonction pour charger les favoris depuis Firebase
+  const loadFavoritesFromFirebase = async (uid) => {
+    try {
+      console.log('📥 Chargement favoris depuis Firebase pour:', uid);
+      
+      // 1. Récupérer les IDs des favoris depuis Firebase
+      const favoriteIds = await getFavoriteIds(uid);
+      console.log('📋 IDs favoris Firebase:', favoriteIds);
+      
+      if (favoriteIds.length === 0) {
+        console.log('ℹ️ Aucun favori trouvé dans Firebase');
+        return [];
+      }
+      
+      // 2. Récupérer toutes les soupes depuis SQLite
+      const allSoupes = await getAllSoupes();
+      console.log('🍲 Toutes les soupes SQLite:', allSoupes.length);
+      
+      // 3. Filtrer pour garder seulement les soupes favorites
+      // Convertir les IDs en nombres pour la comparaison
+      const favSoupes = allSoupes.filter(soupe => 
+        favoriteIds.some(favId => Number(favId) === soupe.id)
+      );
+      
+      console.log('✅ Favoris chargés:', favSoupes.length);
+      return favSoupes;
+    } catch (error) {
+      console.error('Erreur chargement favoris:', error);
+      return [];
+    }
+  };
+
   const loadFavorites = async (uid) => {
     try {
       setLoading(true);
       console.log('📥 Chargement favoris pour:', uid);
-      const favSoupes = await getFavoriteSoupes(uid);
+      const favSoupes = await loadFavoritesFromFirebase(uid);
       console.log('✅ Favoris chargés:', favSoupes.length);
       setFavorites(favSoupes);
       setLoading(false);
@@ -75,36 +105,6 @@ export default function ProfileScreen() {
     );
   };
 
-  const handleExportDatabase = async () => {
-    setExporting(true);
-    try {
-      const exportPath = await exportDatabaseToBackend();
-      Alert.alert(
-        '✅ Export réussi!',
-        `La base de données a été exportée.\n\nChemin: ${exportPath}\n\nVous pouvez récupérer ce fichier et le copier dans votre dossier backend/ sur votre PC.`,
-        [
-          {
-            text: 'Partager',
-            onPress: async () => {
-              try {
-                await Share.share({
-                  message: `Base de données exportée: ${exportPath}`,
-                  title: 'Export SQLite'
-                });
-              } catch (error) {
-                console.error('Erreur partage:', error);
-              }
-            }
-          },
-          { text: 'OK' }
-        ]
-      );
-    } catch (error) {
-      Alert.alert('❌ Erreur', 'Impossible d\'exporter la base de données');
-    }
-    setExporting(false);
-  };
-
   const handleRemoveFavorite = async (soupeId) => {
     Alert.alert(
       'Retirer des favoris',
@@ -115,8 +115,15 @@ export default function ProfileScreen() {
           text: 'Retirer',
           style: 'destructive',
           onPress: async () => {
-            await removeFavorite(user.uid, soupeId);
-            setFavorites(favorites.filter(s => s.id !== soupeId));
+            try {
+              await removeFavorite(user.uid, soupeId);
+              // Mettre à jour la liste locale
+              setFavorites(favorites.filter(s => s.id !== soupeId));
+              console.log('✅ Favori retiré de Firebase:', soupeId);
+            } catch (error) {
+              console.error('❌ Erreur suppression:', error);
+              Alert.alert('Erreur', 'Impossible de retirer le favori');
+            }
           }
         }
       ]
@@ -128,8 +135,11 @@ export default function ProfileScreen() {
     return colors[saisonLower] || colors.primary;
   };
 
-  const renderFavoriteCard = ({ item }) => (
-    <View style={styles.favoriteCard}>
+   const renderFavoriteCard = ({ item }) => (
+    <TouchableOpacity  // Changez View en TouchableOpacity
+      style={styles.favoriteCard}
+      onPress={() => navigation.navigate('DetailsSoupe', { soupe: item })} // Ajoutez cette ligne
+    >
       {/* Image de la soupe favorite */}
       {item.image && (
         <Image 
@@ -140,23 +150,25 @@ export default function ProfileScreen() {
       )}
       
       <View style={styles.favoriteCardContent}>
-        <View style={styles.favoriteCardHeader}>
-          <Text style={styles.favoriteName}>{item.nom}</Text>
-          <TouchableOpacity 
-            onPress={() => handleRemoveFavorite(item.id)}
-            style={styles.removeButton}
-          >
-            <Ionicons name="heart" size={24} color="#FF0000" />
-          </TouchableOpacity>
+        <View style={styles.cardHeader}> 
+          <Text style={styles.soupeName} numberOfLines={2}>{item.nom}</Text> 
+          <View style={styles.cardHeaderRight}> 
+            <View style={[styles.saisonBadge, { backgroundColor: getSaisonColor(item.saison) }]}>
+              <Text style={styles.saisonText}>{item.saison}</Text>
+            </View>
+            <TouchableOpacity 
+              onPress={(e) => { // Modifiez cette ligne
+                e.stopPropagation(); // Empêche la navigation vers DetailsSoupe
+                handleRemoveFavorite(item.id);
+              }}
+              style={styles.favoriteButton} 
+            >
+              <Ionicons name="heart" size={24} color="#FF0000" />
+            </TouchableOpacity>
+          </View>
         </View>
-        <View style={[styles.saisonBadge, { backgroundColor: getSaisonColor(item.saison) }]}>
-          <Text style={styles.saisonText}>{item.saison}</Text>
-        </View>
-        <Text style={styles.favoriteIngredients}>
-          🥕 {item.ingredients}
-        </Text>
       </View>
-    </View>
+    </TouchableOpacity> // Changez la fermeture en TouchableOpacity
   );
 
   return (
@@ -194,23 +206,6 @@ export default function ProfileScreen() {
 
       {/* Bouton de déconnexion */}
       <View style={styles.buttonsContainer}>
-        {/* Bouton Export */}
-        <TouchableOpacity 
-          style={styles.exportButton} 
-          onPress={handleExportDatabase}
-          disabled={exporting}
-        >
-          {exporting ? (
-            <ActivityIndicator color={colors.white} />
-          ) : (
-            <>
-              <Ionicons name="download-outline" size={24} color={colors.white} />
-              <Text style={styles.buttonText}>Exporter la base de données</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {/* Bouton Déconnexion */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={24} color={colors.white} />
           <Text style={styles.buttonText}>Se déconnecter</Text>
@@ -260,7 +255,7 @@ const styles = StyleSheet.create({
   favoritesList: {
     paddingBottom: 20,
   },
-  favoriteCard: {
+favoriteCard: {
     backgroundColor: colors.white,
     borderRadius: 15,
     marginBottom: 15,
@@ -271,40 +266,53 @@ const styles = StyleSheet.create({
     elevation: 3,
     overflow: 'hidden',
   },
+  
   favoriteImage: {
     width: '100%',
-    height: 150,
+    height: 180, // Changez de 150 à 180
   },
+  
   favoriteCardContent: {
-    padding: 15,
+    padding: 12, // Changé de 15 à 12 pour correspondre à HomeScreen
   },
-  favoriteCardHeader: {
+  
+  // STYLES COPIÉS DE HomeScreen.js (corrigés)
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
   },
-  favoriteName: {
+  
+  cardHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  
+  soupeName: {
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.text,
     flex: 1,
+    marginRight: 8,
   },
-  removeButton: {
-    padding: 5,
-  },
+  
   saisonBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 15,
-    alignSelf: 'flex-start',
-    marginBottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
+  
   saisonText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
+  
+  favoriteButton: {
+    padding: 4,
+  },
+  
   favoriteIngredients: {
     fontSize: 14,
     color: colors.gray,

@@ -1,7 +1,8 @@
+// backend/firebase-config.js
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore'; // Ajoutez cette ligne
 
-// Configuration Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyBQSuNM48oibD73gbY3hFj0rN2rQiK-MP0",
   authDomain: "devmobilproject.firebaseapp.com",
@@ -12,9 +13,7 @@ const firebaseConfig = {
   measurementId: "G-PDYBCMH306"
 };
 
-// Initialiser Firebase
 const app = initializeApp(firebaseConfig);
-
-// Exporter l'authentification
 export const auth = getAuth(app);
+export const db = getFirestore(app); // Ajoutez cette ligne
 export default app;

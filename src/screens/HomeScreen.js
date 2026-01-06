@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   StyleSheet,
@@ -12,14 +13,8 @@ import {
 } from 'react-native';
 import { auth } from '../../backend/firebase-config';
 import colors from '../constants/colors';
-import {
-  addFavorite,
-  getAllSoupes,
-  getFavoriteIds,
-  getSaisons,
-  getSoupesBySaison,
-  removeFavorite
-} from '../services/databaseService';
+import { getAllSoupes, getSaisons, getSoupesBySaison } from '../services/databaseService';
+import { addFavorite, getFavoriteIds, removeFavorite } from '../services/favorisService';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -33,6 +28,23 @@ export default function HomeScreen() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // 🆕 Recharger les favoris à chaque fois que l'écran devient visible
+  useFocusEffect(
+    useCallback(() => {
+      const loadFavorites = async () => {
+        const user = auth.currentUser;
+        if (user) {
+          console.log('🔄 HomeScreen - Rechargement des favoris');
+          const favIds = await getFavoriteIds(user.uid);
+          setFavoriteIds(favIds);
+          console.log('✅ Favoris rechargés:', favIds);
+        }
+      };
+      
+      loadFavorites();
+    }, [])
+  );
 
   const loadData = async () => {
     try {
@@ -77,16 +89,35 @@ export default function HomeScreen() {
 
   const toggleFavorite = async (soupeId) => {
     const user = auth.currentUser;
-    if (!user) return;
+    
+    if (!user) {
+      console.log('❌ Aucun utilisateur connecté');
+      Alert.alert('Connexion requise', 'Veuillez vous connecter pour ajouter des favoris');
+      return;
+    }
 
+    console.log('🔍 toggleFavorite - User UID:', user.uid, 'Soupe ID:', soupeId);
+    
     const isFav = favoriteIds.includes(soupeId);
+    console.log('❤️ Est déjà favori?', isFav);
 
-    if (isFav) {
-      await removeFavorite(user.uid, soupeId);
-      setFavoriteIds(favoriteIds.filter(id => id !== soupeId));
-    } else {
-      await addFavorite(user.uid, soupeId);
-      setFavoriteIds([...favoriteIds, soupeId]);
+    try {
+      if (isFav) {
+        console.log('🗑️ Suppression du favori...');
+        const result = await removeFavorite(user.uid, soupeId);
+        if (result) {
+          setFavoriteIds(favoriteIds.filter(id => id !== soupeId));
+        }
+      } else {
+        console.log('➕ Ajout du favori...');
+        const result = await addFavorite(user.uid, soupeId);
+        if (result) {
+          setFavoriteIds([...favoriteIds, soupeId]);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erreur toggleFavorite:', error);
+      Alert.alert('Erreur', 'Impossible de modifier les favoris: ' + error.message);
     }
   };
 
@@ -222,7 +253,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  // NOUVEAUX STYLES POUR LE BLOC SOUPES
   soupesHeader: {
     backgroundColor: colors.primary,
     paddingTop: 45,
@@ -250,7 +280,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: 'rgba(255, 255, 255, 0.9)',
   },
-  // STYLES EXISTANTS
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

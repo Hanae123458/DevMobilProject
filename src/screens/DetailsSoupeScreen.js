@@ -8,14 +8,15 @@ import {
     Text,
     TouchableOpacity,
     View,
+    Alert,
 } from 'react-native';
 import { auth } from '../../backend/firebase-config';
 import colors from '../constants/colors';
-import {
-    addFavorite,
-    getFavoriteIds,
-    removeFavorite
-} from '../services/databaseService';
+import { 
+    addFavorite, 
+    getFavoriteIds, 
+    removeFavorite 
+} from '../services/favorisService'; 
 
 export default function DetailsSoupeScreen() {
   const navigation = useNavigation();
@@ -25,7 +26,6 @@ export default function DetailsSoupeScreen() {
   const [isFavorite, setIsFavorite] = useState(false);
 
   useEffect(() => {
-    // Titre dynamique dans le header
     navigation.setOptions({ title: soupe.nom });
     loadFavorites();
   }, [soupe.nom, navigation]);
@@ -41,16 +41,24 @@ export default function DetailsSoupeScreen() {
 
   const toggleFavorite = async () => {
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user) {
+      Alert.alert('Connexion requise', 'Veuillez vous connecter pour ajouter des favoris');
+      return;
+    }
 
-    if (isFavorite) {
-      await removeFavorite(user.uid, soupe.id);
-      setIsFavorite(false);
-      setFavoriteIds(favoriteIds.filter(id => id !== soupe.id));
-    } else {
-      await addFavorite(user.uid, soupe.id);
-      setIsFavorite(true);
-      setFavoriteIds([...favoriteIds, soupe.id]);
+    try {
+      if (isFavorite) {
+        await removeFavorite(user.uid, soupe.id);
+        setIsFavorite(false);
+        setFavoriteIds(favoriteIds.filter(id => id !== soupe.id));
+      } else {
+        await addFavorite(user.uid, soupe.id);
+        setIsFavorite(true);
+        setFavoriteIds([...favoriteIds, soupe.id]);
+      }
+    } catch (error) {
+      console.error('Erreur toggleFavorite:', error);
+      Alert.alert('Erreur', 'Impossible de modifier les favoris');
     }
   };
 
@@ -59,7 +67,6 @@ export default function DetailsSoupeScreen() {
     return colors[saisonLower] || colors.primary;
   };
 
-  // Bouton de favori dans le header
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -87,7 +94,7 @@ export default function DetailsSoupeScreen() {
           resizeMode="cover"
         />
       )}
-
+      
       <View style={styles.content}>
         {/* Nom et saison */}
         <View style={styles.header}>
